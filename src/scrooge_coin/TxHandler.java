@@ -91,45 +91,43 @@ public class TxHandler {
        for(int index = 0; index < possibleTxs.length; index++) {
     	   Transaction tx = possibleTxs[index];
     	   if(isValidTx(tx)) {
+    		   updateTransactionIntoThePool(tx);
     		   validTxs.add(tx);
     	   } else {
     		   invalidTxs.add(tx);
     	   }
        }
-       
-       updateTransactionIntoThePool(validTxs);
+  
        while(true) {
     	   //No invalid transaction left
     	   if(invalidTxs.size() == 0) {
     		   break;
     	   }
     	   
-    	   List<Transaction> localValidTxs = new ArrayList<Transaction>();
+    	  
     	   List<Transaction> localInValidTxs = new ArrayList<Transaction>();
-    	   
+    	   boolean isFoundValidTx = false;
     	   for(Transaction tx : invalidTxs) {
         	   if(isValidTx(tx)) {
-        		   localValidTxs.add(tx);
+        		   updateTransactionIntoThePool(tx);
+        		   validTxs.add(tx);
+        		   isFoundValidTx = true;
         	   } else {
         		   localInValidTxs.add(tx);
         	   }
            }
     	   
-    	   if(localValidTxs.size() == 0) {
+    	   if(!isFoundValidTx) {
     		   break;
     	   }
-    	   
-    	   updateTransactionIntoThePool(validTxs);
-    	   validTxs.addAll(localValidTxs);
+    	 
     	   invalidTxs = localInValidTxs;
        }
       
        return validTxs.toArray(new Transaction[validTxs.size()]);
     }
     
-    private void updateTransactionIntoThePool(List<Transaction> validTxs) {
-    	// Add each transaction to the pool
-        for(Transaction tx : validTxs) {
+    private void updateTransactionIntoThePool(Transaction tx) {
      	   tx.finalize();
      	   byte[] hash = tx.getHash();
      	   
@@ -143,7 +141,6 @@ public class TxHandler {
         			UTXO utxo = new UTXO(hash, index);
         			utxoPool.addUTXO(utxo, output);
      	   }
-        }
     }
 
 }
