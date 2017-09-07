@@ -1,6 +1,7 @@
 package scrooge_coin;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class TxHandler {
@@ -80,8 +81,69 @@ public class TxHandler {
      * updating the current UTXO pool as appropriate.
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
-        // IMPLEMENT THIS
-    	return null;
+    	//Check for input value and return
+        if(possibleTxs == null) {
+        	return null;
+        }
+        
+       List<Transaction> validTxs = new ArrayList<Transaction>();
+       List<Transaction> invalidTxs = new ArrayList<Transaction>();
+       for(int index = 0; index < possibleTxs.length; index++) {
+    	   Transaction tx = possibleTxs[index];
+    	   if(isValidTx(tx)) {
+    		   validTxs.add(tx);
+    	   } else {
+    		   invalidTxs.add(tx);
+    	   }
+       }
+       
+       updateTransactionIntoThePool(validTxs);
+       while(true) {
+    	   //No invalid transaction left
+    	   if(invalidTxs.size() == 0) {
+    		   break;
+    	   }
+    	   
+    	   List<Transaction> localValidTxs = new ArrayList<Transaction>();
+    	   List<Transaction> localInValidTxs = new ArrayList<Transaction>();
+    	   
+    	   for(Transaction tx : invalidTxs) {
+        	   if(isValidTx(tx)) {
+        		   localValidTxs.add(tx);
+        	   } else {
+        		   localInValidTxs.add(tx);
+        	   }
+           }
+    	   
+    	   if(localValidTxs.size() == 0) {
+    		   break;
+    	   }
+    	   
+    	   updateTransactionIntoThePool(validTxs);
+    	   validTxs.addAll(localValidTxs);
+    	   invalidTxs = localInValidTxs;
+       }
+      
+       return validTxs.toArray(new Transaction[validTxs.size()]);
+    }
+    
+    private void updateTransactionIntoThePool(List<Transaction> validTxs) {
+    	// Add each transaction to the pool
+        for(Transaction tx : validTxs) {
+     	   tx.finalize();
+     	   byte[] hash = tx.getHash();
+     	   
+     	   for(Transaction.Input input : tx.getInputs()) {
+     		   UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+     		   utxoPool.removeUTXO(utxo);
+     	   }
+     	   
+     	   for(int index = 0; index < tx.numOutputs(); index++) {
+        			Transaction.Output output = tx.getOutput(index);
+        			UTXO utxo = new UTXO(hash, index);
+        			utxoPool.addUTXO(utxo, output);
+     	   }
+        }
     }
 
 }
