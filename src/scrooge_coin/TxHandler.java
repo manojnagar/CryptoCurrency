@@ -60,8 +60,8 @@ public class TxHandler {
     	double totalOutValue = 0;
     	for(int index = 0; index < tx.numOutputs(); index++) {
     		Transaction.Output output = tx.getOutput(index);
-    		// Output value is negative or zero : Case-4
-    		if (output.value <= 0) {
+    		// Output value is negative : Case-4
+    		if (output.value < 0) {
     			return false;
     		}
     		totalOutValue += output.value;
