@@ -1,6 +1,7 @@
 package scrooge_coin;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -91,53 +92,136 @@ public class MaxFeeTxHandler {
      * updating the current UTXO pool as appropriate.
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
-    	
-    	List<Transaction> globalValidTxs = new ArrayList<Transaction>();
-    	
-        List<Transaction> validTxs = new ArrayList<Transaction>();
-        List<Transaction> invalidTxs = new ArrayList<Transaction>();
-        for(int index = 0; index < possibleTxs.length; index++) {
-     	   Transaction tx = possibleTxs[index];
-     	   if(isValidTx(tx)) {
-     		   validTxs.add(tx);
-     	   } else {
-     		   invalidTxs.add(tx);
-     	   }
-        }
+        List<Transaction> txs =  Arrays.asList(possibleTxs);
+        Response response = getMaxProfitValidTxs(utxoPool, txs);
+        
+        List<Transaction> resultTxs = response.txs;
+        return resultTxs.toArray(new Transaction[resultTxs.size()]);
+    }
+    
+    private Response getMaxProfitValidTxs(UTXOPool utxoPool, List<Transaction> txs) {
    
-        while(true) {
-        	//No valid transactions
+    	//Check for empty or reach to the end
+    	if(txs.isEmpty()) {
+    		return new Response(0, new ArrayList<Transaction>());
+    	}
+    	
+    	List<Transaction> nextValidTxs = new ArrayList<Transaction>();
+    	List<Transaction> nextInValidTxs = new ArrayList<Transaction>();
+    	
+    	List<Transaction> result = new ArrayList<Transaction>();
+    	double profit = 0;
+    	
+    	while(true) {
+        	//Check for empty or reach to the end
+        	if(txs.isEmpty()) {
+        		break;
+        	}
+        	
+        	List<Transaction> validTxs = new ArrayList<Transaction>();
+        	List<Transaction> invalidTxs = new ArrayList<Transaction>();
+        	for(Transaction tx : txs) {
+        		if(isValidTx(utxoPool, tx)) {
+        			validTxs.add(tx);
+        		} else {
+        			invalidTxs.add(tx);
+        		}
+        	}
+
+        	//No valid transaction so : zero profit
         	if(validTxs.isEmpty()) {
+        		nextInValidTxs = invalidTxs;
         		break;
+        	}	
+        
+        	Set<Integer> tmpIndexs = new HashSet<>();
+        	for(int index=0; index<validTxs.size(); index++) {
+        		if(isNonConflict(index, validTxs)) {
+        			tmpIndexs.add(index);
+        		}
         	}
         	
-        	Transaction maxTx = getAndUpdateMaxProfitTransactionIntoThePool(utxoPool, validTxs, invalidTxs);
-        	//Transaction is null
-        	if(maxTx == null) {
-        		break;
+        	List<Transaction> tmpValidTxs = new ArrayList<Transaction>();
+        	for(int index=0; index< validTxs.size(); index++) {
+        		Transaction tx = validTxs.get(index);
+        		if(tmpIndexs.contains(index)) {
+        				profit += getProfitForTransaction(utxoPool, tx);
+            			updateTransactionIntoThePool(utxoPool, tx);
+            			result.add(tx);		
+        		} else {
+        			tmpValidTxs.add(tx);
+        		}
         	}
-        	globalValidTxs.add(maxTx);
         	
-     	   //No invalid transaction left
-     	   if(invalidTxs.isEmpty()) {
-     		   break;
-     	   }
-     	   
-     	  List<Transaction> localValidTxs = new ArrayList<Transaction>();
-          List<Transaction> localInvalidTxs = new ArrayList<Transaction>();
-          for(Transaction tx : invalidTxs) {
-       	   if(isValidTx(tx)) {
-       		   localValidTxs.add(tx);
-       	   } else {
-       		   localInvalidTxs.add(tx);
-       	   }
-          }
-         
-          validTxs = localValidTxs;
-          invalidTxs = localInvalidTxs;
-        }
-       
-        return globalValidTxs.toArray(new Transaction[globalValidTxs.size()]);
+        	nextValidTxs.addAll(tmpValidTxs);
+            txs = invalidTxs;
+    	}
+    	
+    	//No valid transaction
+    	if(nextValidTxs.isEmpty()) {
+    		return new Response(profit, result);
+    	}    	
+    	
+    	int maxProfitIndex = 0;
+    	double maxProfitValue = 0.0;
+    	for(int index=0; index < nextValidTxs.size(); index++) {
+    		UTXOPool localUtxoPool = new UTXOPool(utxoPool);
+    		Transaction tx = new Transaction(nextValidTxs.get(index));
+    		double localProfit = getProfitForTransaction(localUtxoPool, tx);
+    		updateTransactionIntoThePool(localUtxoPool, tx);
+    		
+    		List<Transaction> localTxs = new ArrayList<Transaction>(nextValidTxs);
+    		localTxs.remove(index);
+    		localTxs.addAll(nextInValidTxs);
+   
+    		Response localResponse = getMaxProfitValidTxs(localUtxoPool, localTxs);
+    		if((localResponse.profit + localProfit) > maxProfitValue) {
+    			maxProfitIndex = index;
+    			maxProfitValue = localResponse.profit;
+    		}
+    	}
+    	
+    	Transaction tx = nextValidTxs.get(maxProfitIndex);
+    	profit += getProfitForTransaction(utxoPool, tx);
+		updateTransactionIntoThePool(utxoPool, tx);
+		result.add(tx);
+ 
+	   	List<Transaction> nextTransaction = new ArrayList<Transaction>(nextValidTxs);
+		nextTransaction.remove(maxProfitIndex);
+    	nextTransaction.addAll(nextInValidTxs);
+    	Response respone = getMaxProfitValidTxs(utxoPool, nextTransaction);
+    
+    	profit += respone.profit;
+    	result.addAll(respone.txs);
+    	return new Response(profit, result);
+    }
+    
+    private boolean isNonConflict(int index, List<Transaction> txs) {
+    	Transaction tx = txs.get(index);
+    	for(int j=0; j < txs.size(); j++) {
+    		if(index != j && isConflict(tx, txs.get(j))) {
+    			return false;
+    		}
+    	}
+    	return true;
+    }
+    
+    private boolean isConflict(Transaction first, Transaction second) {
+    	Set<Integer> checkUnique = new HashSet<>();
+    	for(Transaction.Input input : first.getInputs()) {
+    		UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+    		checkUnique.add(utxo.hashCode());
+    	}
+    	
+    	for(Transaction.Input input : second.getInputs()) {
+    		UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+    		if(checkUnique.contains(utxo.hashCode())) {
+    			return true;
+    		} else {
+    			checkUnique.add(utxo.hashCode());
+    		}
+    	}
+    	return false;
     }
     
     /**
@@ -160,37 +244,7 @@ public class MaxFeeTxHandler {
         			utxoPool.addUTXO(utxo, output);
      	   }
     }
-    
-    private Transaction getAndUpdateMaxProfitTransactionIntoThePool(UTXOPool utxoPool, 
-    		List<Transaction> validTxs,
-    		List<Transaction> invalidTxs) {
-    	
-    	int maxTransactionIndex = 0;
-    	double currentMaxProfit = 0.0;
-    	int validTxsSize = validTxs.size();
-    	for(int index=0; index < validTxsSize; index++) {
-    		Transaction tx = validTxs.get(index);
-    		double profit = getProfitForTransaction(utxoPool, tx);
-    		if(currentMaxProfit <= profit) {
-    			maxTransactionIndex = index;
-    			currentMaxProfit = profit;
-    		}
-    	}
-    	
-    	Transaction resultTx = null;
-    	for(int index=0; index < validTxsSize; index++) {
-    		Transaction tx = validTxs.get(index);
-    		if(index == maxTransactionIndex) {
-    			updateTransactionIntoThePool(utxoPool, tx);
-    			resultTx = tx;
-    		} else {
-    			invalidTxs.add(tx);
-    		}
-    	}
-    	return resultTx;
-    }
-
-    
+       
     /**
      * Caller need to be ensure that transaction is valid for given pool
      * Get total profit from the transaction corresponding to given utxoPool
@@ -215,5 +269,15 @@ public class MaxFeeTxHandler {
     	double totalProfit = totalInValue - totalOutValue;
     	
     	return totalProfit; 
+    }
+    
+    private class Response {
+    	double profit;
+    	List<Transaction> txs;
+    	
+    	public Response(double profit, List<Transaction> txs) {
+    		this.profit = profit;
+    		this.txs = txs;
+    	}
     }
 }
