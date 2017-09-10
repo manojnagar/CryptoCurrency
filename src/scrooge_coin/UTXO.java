@@ -1,12 +1,17 @@
 package scrooge_coin;
+
 import java.util.Arrays;
 
 public class UTXO implements Comparable<UTXO> {
 
-    /** Hash of the transaction from which this UTXO originates */
+    /**
+     * Hash of the transaction from which this UTXO originates
+     */
     private byte[] txHash;
 
-    /** Index of the corresponding output in said transaction */
+    /**
+     * Index of the corresponding output in said transaction
+     */
     private int index;
 
     /**
@@ -18,12 +23,16 @@ public class UTXO implements Comparable<UTXO> {
         this.index = index;
     }
 
-    /** @return the transaction hash of this UTXO */
+    /**
+     * @return the transaction hash of this UTXO
+     */
     public byte[] getTxHash() {
         return txHash;
     }
 
-    /** @return the index of this UTXO */
+    /**
+     * @return the index of this UTXO
+     */
     public int getIndex() {
         return index;
     }
@@ -63,7 +72,9 @@ public class UTXO implements Comparable<UTXO> {
         return hash;
     }
 
-    /** Compares this UTXO to the one specified by {@code utxo} */
+    /**
+     * Compares this UTXO to the one specified by {@code utxo}
+     */
     public int compareTo(UTXO utxo) {
         byte[] hash = utxo.txHash;
         int in = utxo.index;
